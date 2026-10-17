@@ -120,8 +120,39 @@ export default class MultiDisplayAdjustmentPreferences extends ExtensionPreferen
         group.add(showContrast)
         group.add(groupDisplays)
 
+        // The displays are only known to the shell, so auto-rotate is turned on
+        // for each of them in its Displays menu
+        const rotationGroup = new Adw.PreferencesGroup({
+            title: _('Rotation'),
+            description: _('Displays with an orientation sensor, such as some portable monitors, get an Auto Rotate switch in the Displays menu. Only with tile placement.')
+        })
+
+        const enableAutoRotate = new Adw.SwitchRow({
+            title: _('Auto rotate'),
+            subtitle: _('When off, no Auto Rotate switches are shown and displays are not polled')
+        })
+        settings.bind('enable-auto-rotate', enableAutoRotate, 'active', Gio.SettingsBindFlags.DEFAULT)
+
+        const interval = new Adw.SpinRow({
+            title: _('Polling interval'),
+            subtitle: _('Seconds between orientation reads'),
+            digits: 1,
+            adjustment: new Gtk.Adjustment({
+                lower: 0.5,
+                upper: 60,
+                step_increment: 0.5,
+                page_increment: 5
+            })
+        })
+        settings.bind('auto-rotate-interval', interval, 'value', Gio.SettingsBindFlags.DEFAULT)
+        settings.bind('enable-auto-rotate', interval, 'sensitive', Gio.SettingsBindFlags.GET)
+
+        rotationGroup.add(enableAutoRotate)
+        rotationGroup.add(interval)
+
         const page = new Adw.PreferencesPage()
         page.add(group)
+        page.add(rotationGroup)
         window.add(page)
     }
 }

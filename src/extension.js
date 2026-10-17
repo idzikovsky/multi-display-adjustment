@@ -12,6 +12,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js'
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js'
 import { SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js'
 
+import { AutoRotator } from './auto-rotate.js'
 import { areArraysEqual, devLog } from './code-convenience.js'
 import { DisplaysToggle } from './displays-menu.js'
 import { DisplayConfigService } from './display-config-service.js'
@@ -44,6 +45,10 @@ class TileView {
         this._toggle.setDisplays(displays)
     }
 
+    setRotatableDisplays(displays) {
+        this._toggle.setRotatableDisplays(displays)
+    }
+
     destroy() {
         this._indicator.quickSettingsItems.forEach(item => item.destroy())
         this._indicator.quickSettingsItems = []
@@ -58,6 +63,7 @@ export default class DisplaysAdjustmentsExtension extends Extension {
     enable() {
         this._previousSignature = null
         this._displays = []
+        this._rotatableDisplays = []
         this._inline = null
 
         this._displayConfigService = new DisplayConfigService()
@@ -67,6 +73,13 @@ export default class DisplaysAdjustmentsExtension extends Extension {
         this._settings.connectObject('changed::slider-placement', () => this._applyPlacement(), this)
 
         this._applyPlacement()
+
+        this._autoRotator = new AutoRotator(
+            this._ddcutilService, this._displayConfigService, this._settings,
+            displays => {
+                this._rotatableDisplays = displays
+                this._view.setRotatableDisplays?.(displays)
+            })
 
         this._connectServices().catch(error => logError(error, '[multi-display-adjustment] Could not start'))
     }
@@ -94,6 +107,11 @@ export default class DisplaysAdjustmentsExtension extends Extension {
 
         if (this._displays.length > 0) {
             this._view.setDisplays(this._displays)
+        }
+
+        // Only the tile has a menu to put the Auto Rotate switches in
+        if (this._rotatableDisplays.length > 0) {
+            this._view.setRotatableDisplays?.(this._rotatableDisplays)
         }
     }
 
@@ -149,12 +167,20 @@ export default class DisplaysAdjustmentsExtension extends Extension {
         this._displays = displays
         this._view.setDisplays(displays)
 
+        this._autoRotator.setDisplays(displays)
+            .catch(error => logError(error, '[multi-display-adjustment] Could not read display orientations'))
+
         // For the preferences window, which runs in its own process
         this._settings.set_int('external-display-count', displays.length)
     }
 
     disable() {
         this._displayConfigService.disconnectMonitorsChanged()
+
+        this._autoRotator.destroy()
+        this._autoRotator = null
+
+        this._rotatableDisplays = []
 
         this._settings.disconnectObject(this)
         this._settings = null

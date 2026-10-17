@@ -40,5 +40,21 @@
       <summary>Where the inline sliders go relative to the brightness slider of GNOME</summary>
       <description>Only used when the sliders are placed "inline". With "above" they sit right above the brightness slider of GNOME, with "below" right below it.</description>
     </key>
+    <key name="enable-auto-rotate" type="b">
+      <default>false</default>
+      <summary>Offer auto-rotate</summary>
+      <description>When enabled, displays that report an orientation over DDC/CI get an Auto Rotate switch in the Displays menu. When disabled, no switches are shown and the orientation of the displays is never read, whatever auto-rotate-displays says. Off by default, so that the extension behaves as before auto-rotate was added until it is turned on.</description>
+    </key>
+    <key name="auto-rotate-displays" type="as">
+      <default>[]</default>
+      <summary>Displays that rotate automatically</summary>
+      <description>Model and serial, as "model#serial", of every display that is rotated when it is turned. Only displays with an orientation sensor that report it over DDC/CI (VCP 0xAA), such as some portable monitors, can rotate. Set with the Auto Rotate switches in the Displays menu.</description>
+    </key>
+    <key name="auto-rotate-interval" type="d">
+      <range min="0.5" max="60"/>
+      <default>2.0</default>
+      <summary>Seconds between orientation reads</summary>
+      <description>How often the orientation of the displays with auto-rotate on is read. DDC/CI only answers when asked, so a shorter interval rotates sooner at the cost of more traffic on the display bus.</description>
+    </key>
   </schema>
 </schemalist>

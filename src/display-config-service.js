@@ -7,6 +7,87 @@ import Gio from 'gi://Gio'
 import { devLog, getPossibleBoolean, getPossibleString } from './code-convenience.js'
 
 
+// ApplyMonitorsConfig methods: 1 applies until the next change, without the
+// confirmation dialog or saving to monitors.xml
+const APPLY_METHOD_TEMPORARY = 1
+
+// The layout-mode property: 1 is logical (sizes divided by scale), 2 physical
+const LAYOUT_MODE_PHYSICAL = 2
+
+/**
+ * The logical monitors of a GetCurrentState reply, packed for
+ * ApplyMonitorsConfig, with the one showing `connector` given `transform`.
+ *
+ * Rotating changes the size of that monitor, so the monitors to the right of
+ * it and below it move by the difference, and the layout is moved back to
+ * start at (0, 0). Returns null when the monitor already has `transform`.
+ */
+function rotatedLayout(monitors, logicalMonitors, properties, connector, transform) {
+    const physical = properties['layout-mode']?.get_uint32() === LAYOUT_MODE_PHYSICAL
+
+    const currentModes = new Map()
+
+    for (const [[monitorConnector], modes] of monitors) {
+        const mode = modes.find(candidate => getPossibleBoolean(candidate[6], 'is-current'))
+
+        if (mode !== undefined) {
+            currentModes.set(monitorConnector, mode)
+        }
+    }
+
+    const target = logicalMonitors.find(logicalMonitor =>
+        logicalMonitor[5].some(([monitorConnector]) => monitorConnector === connector))
+
+    if (target === undefined || !currentModes.has(connector)) {
+        throw new Error(`${connector} is not an active display`)
+    }
+
+    const [targetX, targetY, targetScale, targetTransform] = target
+
+    if (targetTransform === transform) {
+        return null
+    }
+
+    // Size in layout coordinates, with the sides swapped by 90° and 270°
+    const sizeWith = someTransform => {
+        const [, width, height] = currentModes.get(connector)
+        const scale = physical ? 1 : targetScale
+        const size = [Math.round(width / scale), Math.round(height / scale)]
+
+        return someTransform % 2 === 1 ? size.reverse() : size
+    }
+
+    const [oldWidth, oldHeight] = sizeWith(targetTransform)
+    const [newWidth, newHeight] = sizeWith(transform)
+
+    const layout = logicalMonitors.map(logicalMonitor => {
+        let [x, y, scale, logicalTransform, primary, monitorSpecs] = logicalMonitor
+
+        if (logicalMonitor === target) {
+            logicalTransform = transform
+        } else {
+            if (x >= targetX + oldWidth) {
+                x += newWidth - oldWidth
+            }
+
+            if (y >= targetY + oldHeight) {
+                y += newHeight - oldHeight
+            }
+        }
+
+        const applyMonitors = monitorSpecs
+            .filter(([monitorConnector]) => currentModes.has(monitorConnector))
+            .map(([monitorConnector]) => [monitorConnector, currentModes.get(monitorConnector)[0], {}])
+
+        return [x, y, scale, logicalTransform, primary, applyMonitors]
+    })
+
+    const minX = Math.min(...layout.map(([x]) => x))
+    const minY = Math.min(...layout.map(([, y]) => y))
+
+    return layout.map(([x, y, ...rest]) => [x - minX, y - minY, ...rest])
+}
+
 class DisplayConfigService {
     /**
      * A subset of org.gnome.Mutter.DisplayConfig.xml from Mutter 46.2. The
@@ -27,6 +108,13 @@ class DisplayConfigService {
                 <arg name="monitors" direction="out" type="a((ssss)a(siiddada{sv})a{sv})" />
                 <arg name="logical_monitors" direction="out" type="a(iiduba(ssss)a{sv})" />
                 <arg name="properties" direction="out" type="a{sv}" />
+            </method>
+
+            <method name="ApplyMonitorsConfig">
+                <arg name="serial" direction="in" type="u" />
+                <arg name="method" direction="in" type="u" />
+                <arg name="logical_monitors" direction="in" type="a(iiduba(ssa{sv}))" />
+                <arg name="properties" direction="in" type="a{sv}" />
             </method>
 
             </interface>
@@ -134,6 +222,36 @@ class DisplayConfigService {
             .map(display => ({ ...display, key: `${display.model}#${display.serial}` }))
 
         return this._orderLeftToRight(enabledDisplays)
+    }
+
+    /**
+     * Gives the display on `connector` the Mutter `transform`, 0 to 3 for 0°,
+     * 90°, 180° and 270°, until the next change of the layout. Returns false
+     * when it already has it.
+     */
+    async rotate(connector, transform) {
+        const [serial, monitors, logicalMonitors, properties] = await this._proxy.GetCurrentStateAsync()
+
+        const layout = rotatedLayout(monitors, logicalMonitors, properties, connector, transform)
+
+        if (layout === null) {
+            return false
+        }
+
+        // The layout is in the coordinates of the current layout mode, while
+        // Mutter applies it in its default mode unless told otherwise. It
+        // refuses the property where the mode cannot be changed.
+        const applyProperties = {}
+
+        if (getPossibleBoolean(properties, 'supports-changing-layout-mode') && 'layout-mode' in properties) {
+            applyProperties['layout-mode'] = properties['layout-mode']
+        }
+
+        devLog('[multi-display-adjustment] Applying rotated layout', layout, applyProperties)
+
+        await this._proxy.ApplyMonitorsConfigAsync(serial, APPLY_METHOD_TEMPORARY, layout, applyProperties)
+
+        return true
     }
 }
 

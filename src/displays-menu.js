@@ -14,7 +14,8 @@ import { gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.j
 import { QuickMenuToggle } from 'resource:///org/gnome/shell/ui/quickSettings.js'
 import { Slider } from 'resource:///org/gnome/shell/ui/slider.js'
 
-import { devLog } from './code-convenience.js'
+import { AutoRotateSwitchItem } from './auto-rotate.js'
+import { areArraysEqual, devLog } from './code-convenience.js'
 import { BRIGHTNESS_VCP_CODE, CONTRAST_VCP_CODE, minBrightness, VcpController } from './vcp-controller.js'
 
 
@@ -149,6 +150,7 @@ class DisplaysToggle extends QuickMenuToggle {
         this._ddcutilService = ddcutilService
         this._settings = settings
         this._displays = []
+        this._rotatableDisplays = []
 
         this._brightnessIcon = new Gio.ThemedIcon({ name: 'display-brightness-symbolic' })
         this._contrastIcon = new Gio.FileIcon({
@@ -189,6 +191,27 @@ class DisplaysToggle extends QuickMenuToggle {
     setDisplays(displays) {
         this._displays = displays
         this._rebuild()
+    }
+
+    /**
+     * The displays that report an orientation, which get an Auto Rotate
+     * switch. Found after `setDisplays()`, since it takes reading each one.
+     */
+    setRotatableDisplays(displays) {
+        const connectors = rotatables => rotatables.map(display => display.connector)
+        const changed = !areArraysEqual(connectors(displays), connectors(this._rotatableDisplays))
+
+        this._rotatableDisplays = displays
+
+        // Rebuilding reads every slider again over DDC/CI, and this is called
+        // after every setDisplays(), with auto-rotate turned off too
+        if (changed) {
+            this._rebuild()
+        }
+    }
+
+    _isRotatable(display) {
+        return this._rotatableDisplays.some(rotatable => rotatable.connector === display.connector)
     }
 
     _rebuild() {
@@ -238,7 +261,13 @@ class DisplaysToggle extends QuickMenuToggle {
             this._section.addMenuItem(contrast)
         }
 
-        this._fetchValues(display.name, heading, brightness, contrast)
+        const rotatable = this._isRotatable(display)
+
+        if (rotatable) {
+            this._section.addMenuItem(new AutoRotateSwitchItem(this._settings, display))
+        }
+
+        this._fetchValues(display.name, heading, brightness, contrast, rotatable)
     }
 
     _addGroup(displays, showContrast) {
@@ -262,14 +291,23 @@ class DisplaysToggle extends QuickMenuToggle {
             this._section.addMenuItem(contrast)
         }
 
-        this._fetchValues(_('All displays'), heading, brightness, contrast)
+        // Rotation is never shared, so every display keeps its own switch
+        const rotatableDisplays = displays.filter(display => this._isRotatable(display))
+
+        for (const display of rotatableDisplays) {
+            this._section.addMenuItem(
+                new AutoRotateSwitchItem(this._settings, display, _('Auto Rotate %s').format(display.name)))
+        }
+
+        this._fetchValues(_('All displays'), heading, brightness, contrast, rotatableDisplays.length > 0)
     }
 
     /**
      * The heading and its sliders are destroyed together, when the menu is
-     * rebuilt or the tile goes away, which cancels the reads.
+     * rebuilt or the tile goes away, which cancels the reads. A heading with
+     * an Auto Rotate switch under it stays, even without sliders.
      */
-    async _fetchValues(label, heading, brightness, contrast) {
+    async _fetchValues(label, heading, brightness, contrast, hasAutoRotate) {
         let hasBrightness, hasContrast
 
         try {
@@ -283,7 +321,7 @@ class DisplaysToggle extends QuickMenuToggle {
             return
         }
 
-        if (!hasBrightness && !hasContrast) {
+        if (!hasBrightness && !hasContrast && !hasAutoRotate) {
             devLog('[multi-display-adjustment] No adjustable features on display', label)
 
             heading.hide()

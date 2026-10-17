@@ -37,6 +37,7 @@ rm -f "$STAGE_DIR/schemas/gschemas.compiled"
 # Everything else, including the license, has to be listed.
 EXTRA_SOURCES=(
     COPYING
+    auto-rotate.js
     code-convenience.js
     ddcutil-service.js
     display-config-service.js
