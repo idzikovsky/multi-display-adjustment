@@ -7,10 +7,12 @@ import Gio from 'gi://Gio'
 import { devLog, getPossibleBoolean, getPossibleString } from './code-convenience.js'
 
 
+// https://gitlab.gnome.org/GNOME/mutter/-/blob/51.1/data/dbus-interfaces/org.gnome.Mutter.DisplayConfig.xml#L489-494
 // ApplyMonitorsConfig methods: 1 applies until the next change, without the
 // confirmation dialog or saving to monitors.xml
 const APPLY_METHOD_TEMPORARY = 1
 
+// https://gitlab.gnome.org/GNOME/mutter/-/blob/51.1/data/dbus-interfaces/org.gnome.Mutter.DisplayConfig.xml#L457-466
 // The layout-mode property: 1 is logical (sizes divided by scale), 2 physical
 const LAYOUT_MODE_PHYSICAL = 2
 
