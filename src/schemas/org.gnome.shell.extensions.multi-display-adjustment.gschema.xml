@@ -43,7 +43,7 @@
     <key name="enable-auto-rotate" type="b">
       <default>false</default>
       <summary>Offer auto-rotate</summary>
-      <description>When enabled, displays that report an orientation over DDC/CI get an Auto Rotate switch in the Displays menu. When disabled, no switches are shown and the orientation of the displays is never read, whatever auto-rotate-displays says. Off by default, so that the extension behaves as before auto-rotate was added until it is turned on.</description>
+      <description>When enabled, displays that report an orientation over DDC/CI get an Auto Rotate switch in the Displays menu. When disabled, no switches are shown and the orientation of the displays is never read, whatever auto-rotate-displays says.</description>
     </key>
     <key name="auto-rotate-displays" type="as">
       <default>[]</default>
