@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Samuel Cecilio
+// SPDX-FileCopyrightText: 2026 Ivan Dzikovsky
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import Gio from 'gi://Gio'
